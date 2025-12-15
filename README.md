@@ -1,4 +1,18 @@
-# Welcome to your Lovable project
+# Finance Buddy - Financial Document Processor
+
+AI-powered financial document analysis and organization system for bank statements, invoices, and receipts.
+
+## Features
+
+- 📄 **Multi-format Support**: Upload and analyze PDFs and images (JPG, PNG)
+- 🤖 **AI-Powered Analysis**: Automatically extracts dates, amounts, vendors, and categories
+- 💱 **Currency Conversion**: Converts all amounts to CHF with accurate exchange rates
+- 📊 **VAT Calculation**: Automatically calculates Swiss VAT (7.7%) and net amounts
+- 🏢 **Vendor Organization**: Groups documents by vendor (e.g., "2 invoices from Revolut, 4 from Google")
+- 📈 **Multiple View Modes**: Cards, Table, By Vendor, and Summary views
+- 📥 **Excel Export**: Exports to 3 separate Excel files (Bank Statements, Invoices, Receipts)
+- 🔍 **Smart Categorization**: Automatically categorizes expenses (travel, meals, software, etc.)
+- 📋 **Quick Summary**: One-click analysis and summarization of all documents
 
 ## Project info
 
