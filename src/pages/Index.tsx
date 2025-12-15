@@ -6,16 +6,27 @@ import StatsBar from '@/components/StatsBar';
 import DataTableView from '@/components/DataTableView';
 import { Button } from '@/components/ui/button';
 import { useDocumentProcessor } from '@/hooks/useDocumentProcessor';
-import { Trash2, LayoutGrid, Table2 } from 'lucide-react';
+import { Trash2, LayoutGrid, Table2, RefreshCw, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 type ViewMode = 'cards' | 'table';
 
 const Index = () => {
-  const { documents, isProcessing, processFiles, clearDocuments } = useDocumentProcessor();
+  const { documents, isProcessing, isLoading, processFiles, clearDocuments, refreshDocuments } = useDocumentProcessor();
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
 
   const completedCount = documents.filter(d => d.status === 'completed').length;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center py-32">
+          <Loader2 className="w-8 h-8 text-accent animate-spin" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -50,7 +61,7 @@ const Index = () => {
         {documents.length > 0 && (
           <>
             {/* View Toggle & Actions */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <h2 className="font-serif text-xl text-foreground">Processed Documents</h2>
                 {completedCount > 0 && (
@@ -76,15 +87,26 @@ const Index = () => {
                   </div>
                 )}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearDocuments}
-                className="text-muted-foreground hover:text-destructive"
-              >
-                <Trash2 className="w-4 h-4 mr-1" />
-                Clear All
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={refreshDocuments}
+                  className="text-muted-foreground"
+                >
+                  <RefreshCw className="w-4 h-4 mr-1" />
+                  Refresh
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDocuments}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Clear All
+                </Button>
+              </div>
             </div>
 
             {/* Content based on view mode */}

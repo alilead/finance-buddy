@@ -14,7 +14,102 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      processed_documents: {
+        Row: {
+          created_at: string
+          document_date: string | null
+          document_number: string | null
+          document_type: string
+          error_message: string | null
+          expense_category: string | null
+          file_name: string
+          file_path: string | null
+          file_type: string
+          id: string
+          issuer: string | null
+          net_amount: number | null
+          net_amount_chf: number | null
+          original_currency: string | null
+          status: string
+          total_amount: number | null
+          total_amount_chf: number | null
+          updated_at: string
+          user_id: string
+          vat_amount: number | null
+          vat_amount_chf: number | null
+        }
+        Insert: {
+          created_at?: string
+          document_date?: string | null
+          document_number?: string | null
+          document_type?: string
+          error_message?: string | null
+          expense_category?: string | null
+          file_name: string
+          file_path?: string | null
+          file_type: string
+          id?: string
+          issuer?: string | null
+          net_amount?: number | null
+          net_amount_chf?: number | null
+          original_currency?: string | null
+          status?: string
+          total_amount?: number | null
+          total_amount_chf?: number | null
+          updated_at?: string
+          user_id: string
+          vat_amount?: number | null
+          vat_amount_chf?: number | null
+        }
+        Update: {
+          created_at?: string
+          document_date?: string | null
+          document_number?: string | null
+          document_type?: string
+          error_message?: string | null
+          expense_category?: string | null
+          file_name?: string
+          file_path?: string | null
+          file_type?: string
+          id?: string
+          issuer?: string | null
+          net_amount?: number | null
+          net_amount_chf?: number | null
+          original_currency?: string | null
+          status?: string
+          total_amount?: number | null
+          total_amount_chf?: number | null
+          updated_at?: string
+          user_id?: string
+          vat_amount?: number | null
+          vat_amount_chf?: number | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
