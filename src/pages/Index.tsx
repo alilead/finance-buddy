@@ -3,12 +3,19 @@ import UploadZone from '@/components/UploadZone';
 import DocumentCard from '@/components/DocumentCard';
 import ExportPanel from '@/components/ExportPanel';
 import StatsBar from '@/components/StatsBar';
+import DataTableView from '@/components/DataTableView';
 import { Button } from '@/components/ui/button';
 import { useDocumentProcessor } from '@/hooks/useDocumentProcessor';
-import { Trash2 } from 'lucide-react';
+import { Trash2, LayoutGrid, Table2 } from 'lucide-react';
+import { useState } from 'react';
+
+type ViewMode = 'cards' | 'table';
 
 const Index = () => {
   const { documents, isProcessing, processFiles, clearDocuments } = useDocumentProcessor();
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+
+  const completedCount = documents.filter(d => d.status === 'completed').length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -41,34 +48,73 @@ const Index = () => {
 
         {/* Main Content */}
         {documents.length > 0 && (
-          <div className="grid lg:grid-cols-3 gap-8">
-            {/* Documents List */}
-            <div className="lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
+          <>
+            {/* View Toggle & Actions */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
                 <h2 className="font-serif text-xl text-foreground">Processed Documents</h2>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearDocuments}
-                  className="text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="w-4 h-4 mr-1" />
-                  Clear All
-                </Button>
+                {completedCount > 0 && (
+                  <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                    <Button
+                      variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('cards')}
+                      className="h-8 px-3"
+                    >
+                      <LayoutGrid className="w-4 h-4 mr-1" />
+                      Cards
+                    </Button>
+                    <Button
+                      variant={viewMode === 'table' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('table')}
+                      className="h-8 px-3"
+                    >
+                      <Table2 className="w-4 h-4 mr-1" />
+                      Table
+                    </Button>
+                  </div>
+                )}
               </div>
-              
-              <div className="grid sm:grid-cols-2 gap-4">
-                {documents.map(doc => (
-                  <DocumentCard key={doc.id} document={doc} />
-                ))}
-              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearDocuments}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 className="w-4 h-4 mr-1" />
+                Clear All
+              </Button>
             </div>
 
-            {/* Export Panel */}
-            <div className="lg:col-span-1">
-              <ExportPanel documents={documents} />
-            </div>
-          </div>
+            {/* Content based on view mode */}
+            {viewMode === 'cards' ? (
+              <div className="grid lg:grid-cols-3 gap-8">
+                {/* Documents List */}
+                <div className="lg:col-span-2">
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {documents.map(doc => (
+                      <DocumentCard key={doc.id} document={doc} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Export Panel */}
+                <div className="lg:col-span-1">
+                  <ExportPanel documents={documents} />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <DataTableView documents={documents} />
+                
+                {/* Export Panel below table */}
+                <div className="max-w-md mx-auto">
+                  <ExportPanel documents={documents} />
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Empty State */}
