@@ -48,6 +48,70 @@ const convertToCHF = (amount: number | null, currency: string | null): number | 
   return Math.round((amount / rate) * 100) / 100;
 };
 
+// Process document with NanoBanana Pro for enhanced OCR
+async function processWithNanoBanana(
+  fileData: string,
+  fileName: string,
+  fileType: string
+): Promise<{ text: string; confidence: number } | null> {
+  const NANOBANANA_API_KEY = Deno.env.get('NANOBANANA_API_KEY');
+  const NANOBANANA_API_URL = Deno.env.get('NANOBANANA_API_URL') || 'https://api.nanobanana.pro/v1/process';
+
+  if (!NANOBANANA_API_KEY) {
+    console.log('NanoBanana Pro API key not configured, skipping OCR enhancement');
+    return null;
+  }
+
+  try {
+    const isImage = fileType.startsWith('image/');
+    const isPDF = fileType === 'application/pdf';
+
+    const requestBody: any = {
+      options: {
+        enhance: true,
+        ocr: true,
+        extract_tables: true,
+        extract_text: true,
+        language: 'auto',
+        improve_quality: true,
+      },
+    };
+
+    if (isImage) {
+      requestBody.image = `data:${fileType};base64,${fileData}`;
+    } else if (isPDF) {
+      requestBody.pdf = `data:application/pdf;base64,${fileData}`;
+    } else {
+      return null;
+    }
+
+    const response = await fetch(NANOBANANA_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${NANOBANANA_API_KEY}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('NanoBanana Pro API error:', response.status, errorText);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    return {
+      text: data.text || data.extracted_text || data.ocr_text || '',
+      confidence: data.confidence || data.ocr_confidence || 0.9,
+    };
+  } catch (error) {
+    console.error('Error processing with NanoBanana Pro:', error);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -67,8 +131,25 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
+    // Step 1: Process with NanoBanana Pro for enhanced OCR (if available)
+    let ocrText = '';
+    let ocrConfidence = 0;
+    const nanoBananaResult = await processWithNanoBanana(fileData, fileName, fileType);
+    if (nanoBananaResult && nanoBananaResult.confidence > 0.5) {
+      ocrText = nanoBananaResult.text;
+      ocrConfidence = nanoBananaResult.confidence;
+      console.log(`NanoBanana Pro extracted text (confidence: ${ocrConfidence.toFixed(2)})`);
+    }
+
     // Prepare the prompt for document analysis with enhanced Gemini instructions
-    const systemPrompt = `You are an expert financial document analyzer powered by Google Gemini. Your task is to analyze financial documents (images or PDFs) and extract all relevant information with high accuracy.
+    const systemPrompt = `You are an expert financial document analyzer powered by Google Gemini with enhanced OCR capabilities via NanoBanana Pro. Your task is to analyze financial documents (images or PDFs) and extract all relevant information with high accuracy.
+
+ENHANCED PROCESSING WITH OCR:
+- You may receive OCR-extracted text from NanoBanana Pro for improved accuracy
+- Use the OCR text to identify exact amounts, dates, and vendor names
+- Cross-reference OCR text with the visual image for verification
+- OCR text provides higher accuracy for numbers and text extraction
+- Combine visual analysis with OCR data for best results
 
 IMPORTANT FOR IMAGE ANALYSIS:
 - For photos/receipts: Carefully examine the entire image, including all text, numbers, dates, and logos
@@ -122,6 +203,11 @@ Expense Categories:
 
 Only return valid JSON, no other text or explanations.`;
 
+    // Build enhanced prompt with OCR text if available
+    const ocrContext = ocrText 
+      ? `\n\nENHANCED OCR TEXT (extracted with NanoBanana Pro, confidence: ${ocrConfidence.toFixed(2)}):\n${ocrText}\n\nUse this OCR text to help identify amounts, dates, vendor names, and other details. Cross-reference with the image to ensure accuracy.`
+      : '';
+
     const userMessage = fileType.startsWith('image/')
       ? {
           role: 'user',
@@ -153,9 +239,9 @@ Only return valid JSON, no other text or explanations.`;
 6. EXPENSE CATEGORY: Categorize based on vendor and content:
    - travel, meals, utilities, software, professional services, office supplies, telecommunications, insurance, rent, or other
 
-File name: ${fileName}
+File name: ${fileName}${ocrContext}
 
-Be thorough and accurate. If information is not clearly visible, set it to null. Only extract what you can clearly see in the image.`,
+Be thorough and accurate. If information is not clearly visible, set it to null. Only extract what you can clearly see in the image or OCR text.`,
             },
             {
               type: 'image_url',
@@ -167,7 +253,9 @@ Be thorough and accurate. If information is not clearly visible, set it to null.
         }
       : {
           role: 'user',
-          content: `This is a PDF document. The filename is "${fileName}". Please analyze the document content and extract financial information including document type, dates, amounts, currencies, VAT information, and expense categories. Even if the text extraction is imperfect, look for patterns typical of bank statements, invoices, or receipts.`,
+          content: `This is a PDF document. The filename is "${fileName}".${ocrContext}
+
+Please analyze the document content and extract financial information including document type, dates, amounts, currencies, VAT information, and expense categories. Use the OCR text above to help identify details. Even if the text extraction is imperfect, look for patterns typical of bank statements, invoices, or receipts.`,
         };
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
