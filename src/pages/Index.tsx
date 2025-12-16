@@ -6,13 +6,14 @@ import StatsBar from '@/components/StatsBar';
 import DataTableView from '@/components/DataTableView';
 import IssuerGroupView from '@/components/IssuerGroupView';
 import SummaryView from '@/components/SummaryView';
+import SpendingDashboard from '@/components/SpendingDashboard';
 import AnalyzeButton from '@/components/AnalyzeButton';
 import { Button } from '@/components/ui/button';
 import { useDocumentProcessor } from '@/hooks/useDocumentProcessor';
-import { Trash2, LayoutGrid, Table2, RefreshCw, Loader2, Building2, BarChart3 } from 'lucide-react';
+import { Trash2, LayoutGrid, Table2, RefreshCw, Loader2, Building2, BarChart3, TrendingUp } from 'lucide-react';
 import { useState, useMemo } from 'react';
 
-type ViewMode = 'cards' | 'table' | 'grouped' | 'summary';
+type ViewMode = 'cards' | 'table' | 'grouped' | 'summary' | 'dashboard';
 
 const Index = () => {
   const { documents, isProcessing, isLoading, processFiles, clearDocuments, refreshDocuments } = useDocumentProcessor();
@@ -127,6 +128,15 @@ const Index = () => {
                       <BarChart3 className="w-4 h-4 mr-1" />
                       Summary
                     </Button>
+                    <Button
+                      variant={viewMode === 'dashboard' ? 'default' : 'ghost'}
+                      size="sm"
+                      onClick={() => setViewMode('dashboard')}
+                      className="h-8 px-3"
+                    >
+                      <TrendingUp className="w-4 h-4 mr-1" />
+                      Dashboard
+                    </Button>
                   </div>
                 )}
               </div>
@@ -207,6 +217,12 @@ const Index = () => {
                 <div className="lg:col-span-1">
                   <ExportPanel documents={sortedDocuments} />
                 </div>
+              </div>
+            )}
+
+            {viewMode === 'dashboard' && (
+              <div>
+                <SpendingDashboard documents={sortedDocuments} />
               </div>
             )}
           </>
