@@ -43,17 +43,18 @@ interface VendorSpending {
   count: number;
 }
 
+// Updated colors to match new palette: shadow-grey, deep-space-blue, alice-blue, blue-slate
 const COLORS = [
-  '#8B7355', // Gold/accent color
-  '#A67C52',
-  '#C49A6C',
-  '#D4AF7A',
-  '#E5C896',
-  '#F5E1B2',
-  '#6B5B4F',
-  '#7D6B5F',
-  '#8F7D6F',
-  '#9F8F7F',
+  '#5F6D89', // blue-slate
+  '#1B3041', // deep-space-blue
+  '#192332', // shadow-grey
+  '#1A1F29', // shadow-grey-2
+  '#DBE0E9', // alice-blue (light)
+  '#4A5A75', // blue-slate variant
+  '#2A3F52', // deep-space-blue variant
+  '#3A4D62', // mixed variant
+  '#6B7D9A', // blue-slate light
+  '#8B9BB5', // blue-slate lighter
 ];
 
 const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
@@ -67,25 +68,32 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
       const date = doc.extractedData.documentDate;
       if (!date) return;
 
-      const dateObj = new Date(date);
-      const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
-      const monthLabel = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      try {
+        const dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) return; // Invalid date
+        
+        const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
-      const existing = monthlyMap.get(monthKey) || {
-        month: monthLabel,
-        total: 0,
-        vat: 0,
-        net: 0,
-        count: 0,
-      };
+        const existing = monthlyMap.get(monthKey) || {
+          month: monthLabel,
+          total: 0,
+          vat: 0,
+          net: 0,
+          count: 0,
+        };
 
-      monthlyMap.set(monthKey, {
-        month: monthLabel,
-        total: existing.total + (doc.extractedData.totalAmountCHF || 0),
-        vat: existing.vat + (doc.extractedData.vatAmountCHF || 0),
-        net: existing.net + (doc.extractedData.netAmountCHF || 0),
-        count: existing.count + 1,
-      });
+        monthlyMap.set(monthKey, {
+          month: monthLabel,
+          total: existing.total + (doc.extractedData.totalAmountCHF || 0),
+          vat: existing.vat + (doc.extractedData.vatAmountCHF || 0),
+          net: existing.net + (doc.extractedData.netAmountCHF || 0),
+          count: existing.count + 1,
+        });
+      } catch (error) {
+        console.error('Error processing date:', date, error);
+        return;
+      }
     });
 
     return Array.from(monthlyMap.values())
@@ -292,8 +300,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={monthlySpending}>
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlySpending} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis tickFormatter={(value) => `CHF ${value}`} />
@@ -305,19 +314,20 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                 <Line
                   type="monotone"
                   dataKey="total"
-                  stroke="#8B7355"
+                  stroke="#5F6D89"
                   strokeWidth={2}
                   name="Total Spending"
                 />
                 <Line
                   type="monotone"
                   dataKey="net"
-                  stroke="#A67C52"
+                  stroke="#1B3041"
                   strokeWidth={2}
                   name="Net Amount"
                 />
               </LineChart>
-            </ResponsiveContainer>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -333,8 +343,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
+              <div style={{ width: '100%', height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
                   <Pie
                     data={categorySpending}
                     cx="50%"
@@ -342,7 +353,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                     labelLine={false}
                     label={({ category, percentage }) => `${category}: ${percentage.toFixed(1)}%`}
                     outerRadius={80}
-                    fill="#8884d8"
+                    fill="#5F6D89"
                     dataKey="amount"
                   >
                     {categorySpending.map((entry, index) => (
@@ -350,8 +361,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                     ))}
                   </Pie>
                   <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                </PieChart>
-              </ResponsiveContainer>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
               <div className="mt-4 space-y-2">
                 {categorySpending.slice(0, 5).map((cat, index) => (
                   <div key={cat.category} className="flex items-center justify-between text-sm">
@@ -382,8 +394,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={topVendors} layout="vertical">
+              <div style={{ width: '100%', height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topVendors} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" tickFormatter={(value) => `CHF ${value}`} />
                   <YAxis dataKey="vendor" type="category" width={120} />
@@ -391,13 +404,14 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                     formatter={(value: number) => formatCurrency(value)}
                     labelStyle={{ color: '#000' }}
                   />
-                  <Bar dataKey="amount" fill="#8B7355" name="Spending (CHF)">
+                  <Bar dataKey="amount" fill="#5F6D89" name="Spending (CHF)">
                     {topVendors.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -413,8 +427,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlySpending}>
+            <div style={{ width: '100%', height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlySpending} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis tickFormatter={(value) => `CHF ${value}`} />
@@ -423,11 +438,12 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                   labelStyle={{ color: '#000' }}
                 />
                 <Legend />
-                <Bar dataKey="total" fill="#8B7355" name="Total" />
-                <Bar dataKey="vat" fill="#A67C52" name="VAT" />
-                <Bar dataKey="net" fill="#C49A6C" name="Net" />
-              </BarChart>
-            </ResponsiveContainer>
+                <Bar dataKey="total" fill="#5F6D89" name="Total" />
+                <Bar dataKey="vat" fill="#1B3041" name="VAT" />
+                <Bar dataKey="net" fill="#192332" name="Net" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -442,8 +458,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
+            <div style={{ width: '100%', height: '250px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
                 <Pie
                   data={typeBreakdown}
                   cx="50%"
@@ -451,7 +468,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                   labelLine={false}
                   label={({ name, value, percentage }) => `${name}: ${formatCurrency(value)} (${percentage.toFixed(1)}%)`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="#5F6D89"
                   dataKey="value"
                 >
                   {typeBreakdown.map((entry, index) => (
@@ -459,8 +476,9 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
                   ))}
                 </Pie>
                 <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              </PieChart>
-            </ResponsiveContainer>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="mt-4 grid grid-cols-3 gap-4 text-center">
               {typeBreakdown.map((type, index) => (
                 <div key={type.name}>
