@@ -16,12 +16,13 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, DollarSign, Calendar, PieChart as PieChartIcon } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Calendar, PieChart as PieChartIcon, FileText, Building2, Globe } from 'lucide-react';
 
 interface SpendingDashboardProps {
   documents: ProcessedDocument[];
 }
 
+// ... (interfaces for data shapes remain the same)
 interface MonthlySpending {
   month: string;
   total: number;
@@ -43,51 +44,40 @@ interface VendorSpending {
   count: number;
 }
 
-// Updated colors to match new palette: shadow-grey, deep-space-blue, alice-blue, blue-slate
+interface CurrencySpending {
+  currency: string;
+  amount: number;
+  count: number;
+}
+
+
+// Enhanced color palette
 const COLORS = [
-  '#5F6D89', // blue-slate
-  '#1B3041', // deep-space-blue
-  '#192332', // shadow-grey
-  '#1A1F29', // shadow-grey-2
-  '#DBE0E9', // alice-blue (light)
-  '#4A5A75', // blue-slate variant
-  '#2A3F52', // deep-space-blue variant
-  '#3A4D62', // mixed variant
-  '#6B7D9A', // blue-slate light
-  '#8B9BB5', // blue-slate lighter
+  '#5F6D89', '#1B3041', '#192332', '#4A5A75',
+  '#DBE0E9', '#2A3F52', '#3A4D62', '#6B7D9A',
+  '#8B9BB5', '#A2B0C7'
 ];
 
 const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
   const [isMounted, setIsMounted] = useState(false);
-  const completedDocs = documents.filter(d => d.status === 'completed');
+  const completedDocs = useMemo(() => documents.filter(d => d.status === 'completed'), [documents]);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // Monthly spending analysis
   const monthlySpending = useMemo(() => {
+    // ... (calculation logic remains the same)
     const monthlyMap = new Map<string, MonthlySpending>();
-
     completedDocs.forEach(doc => {
       const date = doc.extractedData.documentDate;
       if (!date) return;
-
       try {
         const dateObj = new Date(date);
-        if (isNaN(dateObj.getTime())) return; // Invalid date
-        
+        if (isNaN(dateObj.getTime())) return;
         const monthKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}`;
         const monthLabel = dateObj.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-
-        const existing = monthlyMap.get(monthKey) || {
-          month: monthLabel,
-          total: 0,
-          vat: 0,
-          net: 0,
-          count: 0,
-        };
-
+        const existing = monthlyMap.get(monthKey) || { month: monthLabel, total: 0, vat: 0, net: 0, count: 0 };
         monthlyMap.set(monthKey, {
           month: monthLabel,
           total: existing.total + (doc.extractedData.totalAmountCHF || 0),
@@ -95,135 +85,79 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
           net: existing.net + (doc.extractedData.netAmountCHF || 0),
           count: existing.count + 1,
         });
-      } catch (error) {
-        console.error('Error processing date:', date, error);
-        return;
-      }
+      } catch (e) { /* ignore invalid dates */ }
     });
-
-    return Array.from(monthlyMap.values())
-      .sort((a, b) => a.month.localeCompare(b.month));
+    return Array.from(monthlyMap.values()).sort((a, b) => a.month.localeCompare(b.month));
   }, [completedDocs]);
 
-  // Category spending analysis
   const categorySpending = useMemo(() => {
-    const categoryMap = new Map<string, CategorySpending>();
+    // ... (calculation logic remains the same)
+    const categoryMap = new Map<string, Omit<CategorySpending, 'percentage'>>();
     const total = completedDocs.reduce((sum, doc) => sum + (doc.extractedData.totalAmountCHF || 0), 0);
-
     completedDocs.forEach(doc => {
       const category = doc.extractedData.expenseCategory || 'Uncategorized';
-      const existing = categoryMap.get(category) || {
-        category,
-        amount: 0,
-        count: 0,
-        percentage: 0,
-      };
-
+      const existing = categoryMap.get(category) || { category, amount: 0, count: 0 };
       categoryMap.set(category, {
         category,
         amount: existing.amount + (doc.extractedData.totalAmountCHF || 0),
         count: existing.count + 1,
-        percentage: 0,
       });
     });
-
     return Array.from(categoryMap.values())
-      .map(item => ({
-        ...item,
-        percentage: total > 0 ? (item.amount / total) * 100 : 0,
-      }))
+      .map(item => ({ ...item, percentage: total > 0 ? (item.amount / total) * 100 : 0 }))
       .sort((a, b) => b.amount - a.amount);
   }, [completedDocs]);
 
-  // Top vendors analysis
   const topVendors = useMemo(() => {
+    // ... (calculation logic remains the same)
     const vendorMap = new Map<string, VendorSpending>();
-
     completedDocs.forEach(doc => {
       const vendor = doc.extractedData.issuer || 'Unknown';
-      const existing = vendorMap.get(vendor) || {
-        vendor,
-        amount: 0,
-        count: 0,
-      };
-
+      const existing = vendorMap.get(vendor) || { vendor, amount: 0, count: 0 };
       vendorMap.set(vendor, {
         vendor,
         amount: existing.amount + (doc.extractedData.totalAmountCHF || 0),
         count: existing.count + 1,
       });
     });
-
-    return Array.from(vendorMap.values())
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 10);
+    return Array.from(vendorMap.values()).sort((a, b) => b.amount - a.amount).slice(0, 10);
   }, [completedDocs]);
 
-  // Overall statistics
+  const currencySpending = useMemo(() => {
+    const currencyMap = new Map<string, CurrencySpending>();
+    completedDocs.forEach(doc => {
+      const currency = doc.extractedData.originalCurrency || 'N/A';
+      const existing = currencyMap.get(currency) || { currency, amount: 0, count: 0 };
+      currencyMap.set(currency, {
+        currency,
+        amount: existing.amount + (doc.extractedData.totalAmountCHF || 0),
+        count: existing.count + 1,
+      });
+    });
+    return Array.from(currencyMap.values()).sort((a, b) => b.amount - a.amount);
+  }, [completedDocs]);
+
   const stats = useMemo(() => {
+    // ... (calculation logic remains the same, but now includes totalDocs)
     const total = completedDocs.reduce((sum, doc) => sum + (doc.extractedData.totalAmountCHF || 0), 0);
     const vat = completedDocs.reduce((sum, doc) => sum + (doc.extractedData.vatAmountCHF || 0), 0);
     const net = completedDocs.reduce((sum, doc) => sum + (doc.extractedData.netAmountCHF || 0), 0);
     const avgPerDoc = completedDocs.length > 0 ? total / completedDocs.length : 0;
-
-    // Calculate trend (compare last 2 months)
     const lastTwoMonths = monthlySpending.slice(-2);
-    const trend = lastTwoMonths.length === 2
+    const trend = lastTwoMonths.length === 2 && lastTwoMonths[0].total > 0
       ? ((lastTwoMonths[1].total - lastTwoMonths[0].total) / lastTwoMonths[0].total) * 100
       : 0;
-
-    return {
-      total,
-      vat,
-      net,
-      avgPerDoc,
-      trend,
-      totalDocs: completedDocs.length,
-    };
+    return { total, vat, net, avgPerDoc, trend, totalDocs: completedDocs.length };
   }, [completedDocs, monthlySpending]);
 
-  // Document type breakdown
-  const typeBreakdown = useMemo(() => {
-    const types = {
-      bank_statement: completedDocs.filter(d => d.documentType === 'bank_statement'),
-      invoice: completedDocs.filter(d => d.documentType === 'invoice'),
-      receipt: completedDocs.filter(d => d.documentType === 'receipt'),
-    };
-
-    return [
-      {
-        name: 'Bank Statements',
-        value: types.bank_statement.reduce((sum, d) => sum + (d.extractedData.totalAmountCHF || 0), 0),
-        count: types.bank_statement.length,
-      },
-      {
-        name: 'Invoices',
-        value: types.invoice.reduce((sum, d) => sum + (d.extractedData.totalAmountCHF || 0), 0),
-        count: types.invoice.length,
-      },
-      {
-        name: 'Receipts',
-        value: types.receipt.reduce((sum, d) => sum + (d.extractedData.totalAmountCHF || 0), 0),
-        count: types.receipt.length,
-      },
-    ].filter(item => item.value > 0);
-  }, [completedDocs]);
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-CH', {
-      style: 'currency',
-      currency: 'CHF',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(amount);
 
   if (completedDocs.length === 0) {
     return (
       <div className="text-center py-16 text-muted-foreground">
         <PieChartIcon className="w-16 h-16 mx-auto mb-4 opacity-50" />
         <p className="text-lg">No completed documents to analyze</p>
-        <p className="text-sm mt-2">Upload and process documents to see spending analytics</p>
+        <p className="text-sm mt-2">Upload and process documents to see the dashboard</p>
       </div>
     );
   }
@@ -240,274 +174,143 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
   return (
     <div className="space-y-6">
       {/* Key Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Total Spending
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Spending</CardTitle>
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-accent">{formatCurrency(stats.total)}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {stats.totalDocs} document{stats.totalDocs !== 1 ? 's' : ''}
-            </div>
+            <p className="text-xs text-muted-foreground">{stats.totalDocs} documents</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Average per Document
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg. per Document</CardTitle>
+            <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.avgPerDoc)}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {stats.trend !== 0 && (
-                <span className={stats.trend > 0 ? 'text-destructive' : 'text-success'}>
-                  {stats.trend > 0 ? <TrendingUp className="w-3 h-3 inline" /> : <TrendingDown className="w-3 h-3 inline" />}
-                  {' '}
-                  {Math.abs(stats.trend).toFixed(1)}% vs last month
-                </span>
-              )}
-            </div>
+            {stats.trend !== 0 && (
+              <p className={`text-xs ${stats.trend > 0 ? 'text-destructive' : 'text-green-500'}`}>
+                {stats.trend.toFixed(1)}% vs last month
+              </p>
+            )}
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              Total VAT
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total VAT</CardTitle>
+            <Calendar className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.vat)}</div>
-            <div className="text-xs text-muted-foreground mt-1">7.7% Swiss VAT</div>
+            <p className="text-xs text-muted-foreground">7.7% Swiss VAT</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <PieChartIcon className="w-4 h-4" />
-              Net Amount
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Net Amount</CardTitle>
+            <PieChartIcon className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(stats.net)}</div>
-            <div className="text-xs text-muted-foreground mt-1">After VAT deduction</div>
+            <p className="text-xs text-muted-foreground">After VAT deduction</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Monthly Spending Trend */}
-      {monthlySpending.length > 0 && Array.isArray(monthlySpending) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Monthly Spending Trend
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div style={{ width: '100%', height: '300px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlySpending} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis tickFormatter={(value) => `CHF ${value}`} />
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelStyle={{ color: '#000' }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#5F6D89"
-                  strokeWidth={2}
-                  name="Total Spending"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="net"
-                  stroke="#1B3041"
-                  strokeWidth={2}
-                  name="Net Amount"
-                />
-              </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5" />Monthly Spending Trend</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={monthlySpending}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis tickFormatter={(value) => `CHF ${value}`} />
+              <Tooltip formatter={(value: number) => formatCurrency(value)} />
+              <Legend />
+              <Line type="monotone" dataKey="total" stroke="#5F6D89" strokeWidth={2} name="Total Spending" />
+              <Line type="monotone" dataKey="net" stroke="#1B3041" strokeWidth={2} name="Net Amount" />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Category Spending Pie Chart */}
-        {categorySpending.length > 0 && Array.isArray(categorySpending) && (
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Category & Currency Charts */}
+        <div className="lg:col-span-2 space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PieChartIcon className="w-5 h-5" />
-                Spending by Category
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><PieChartIcon className="w-5 h-5" />Spending by Category</CardTitle></CardHeader>
             <CardContent>
-              <div style={{ width: '100%', height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                  <Pie
-                    data={categorySpending}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ category, percentage }) => `${category}: ${percentage.toFixed(1)}%`}
-                    outerRadius={80}
-                    fill="#5F6D89"
-                    dataKey="amount"
-                  >
-                    {categorySpending.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={categorySpending} dataKey="amount" nameKey="category" cx="50%" cy="50%" outerRadius={80} fill="#5F6D89">
+                    {categorySpending.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                   </Pie>
                   <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+                </PieChart>
+              </ResponsiveContainer>
               <div className="mt-4 space-y-2">
                 {categorySpending.slice(0, 5).map((cat, index) => (
                   <div key={cat.category} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-3 h-3 rounded"
-                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                      />
-                      <span>{cat.category}</span>
-                    </div>
-                    <div className="font-medium">
-                      {formatCurrency(cat.amount)} ({cat.count} docs)
-                    </div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS[index % COLORS.length] }} /><span>{cat.category}</span></div>
+                    <div className="font-medium">{formatCurrency(cat.amount)}</div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
-        )}
 
-        {/* Top Vendors Bar Chart */}
-        {topVendors.length > 0 && Array.isArray(topVendors) && (
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
-                Top Vendors by Spending
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Globe className="w-5 h-5" />Spending by Currency</CardTitle></CardHeader>
             <CardContent>
-              <div style={{ width: '100%', height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topVendors} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tickFormatter={(value) => `CHF ${value}`} />
-                  <YAxis dataKey="vendor" type="category" width={120} />
-                  <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
-                    labelStyle={{ color: '#000' }}
-                  />
-                  <Bar dataKey="amount" fill="#5F6D89" name="Spending (CHF)">
-                    {topVendors.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie data={currencySpending} dataKey="amount" nameKey="currency" cx="50%" cy="50%" outerRadius={80} fill="#5F6D89">
+                    {currencySpending.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-4 space-y-2">
+                {currencySpending.slice(0, 5).map((cur, index) => (
+                  <div key={cur.currency} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 rounded" style={{ backgroundColor: COLORS[index % COLORS.length] }} /><span>{cur.currency}</span></div>
+                    <div className="font-medium">{formatCurrency(cur.amount)}</div>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
-        )}
-      </div>
+        </div>
 
-      {/* Monthly Breakdown Bar Chart */}
-      {monthlySpending.length > 0 && Array.isArray(monthlySpending) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Monthly Breakdown
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div style={{ width: '100%', height: '300px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlySpending} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis tickFormatter={(value) => `CHF ${value}`} />
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelStyle={{ color: '#000' }}
-                />
-                <Legend />
-                <Bar dataKey="total" fill="#5F6D89" name="Total" />
-                <Bar dataKey="vat" fill="#1B3041" name="VAT" />
-                <Bar dataKey="net" fill="#192332" name="Net" />
+        {/* Top Vendors */}
+        <div className="lg:col-span-3">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" />Top Vendors by Spending</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={500}>
+                <BarChart data={topVendors} layout="vertical" margin={{ left: 100 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" tickFormatter={(value) => `CHF ${value}`} />
+                  <YAxis dataKey="vendor" type="category" width={100} />
+                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Bar dataKey="amount" fill="#5F6D89" name="Spending (CHF)">
+                    {topVendors.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Document Type Distribution */}
-      {typeBreakdown.length > 0 && Array.isArray(typeBreakdown) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PieChartIcon className="w-5 h-5" />
-              Spending by Document Type
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div style={{ width: '100%', height: '250px' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                <Pie
-                  data={typeBreakdown}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, value, percentage }) => `${name}: ${formatCurrency(value)} (${percentage.toFixed(1)}%)`}
-                  outerRadius={80}
-                  fill="#5F6D89"
-                  dataKey="value"
-                >
-                  {typeBreakdown.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index * 2 % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-4 grid grid-cols-3 gap-4 text-center">
-              {typeBreakdown.map((type, index) => (
-                <div key={type.name}>
-                  <div className="text-2xl font-bold">{formatCurrency(type.value)}</div>
-                  <div className="text-sm text-muted-foreground">{type.name}</div>
-                  <div className="text-xs text-muted-foreground">{type.count} document{type.count !== 1 ? 's' : ''}</div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 };
 
 export default SpendingDashboard;
-

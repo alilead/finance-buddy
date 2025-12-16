@@ -253,9 +253,33 @@ Be thorough and accurate. If information is not clearly visible, set it to null.
         }
       : {
           role: 'user',
-          content: `This is a PDF document. The filename is "${fileName}".${ocrContext}
+          content: `You are analyzing a financial document in PDF format. Please carefully examine its content and extract ALL relevant information:
 
-Please analyze the document content and extract financial information including document type, dates, amounts, currencies, VAT information, and expense categories. Use the OCR text above to help identify details. Even if the text extraction is imperfect, look for patterns typical of bank statements, invoices, or receipts.`,
+1. DOCUMENT TYPE: Determine if this is a bank_statement, invoice, or receipt based on the document structure and content.
+
+2. VENDOR/ISSUER: Identify the company, bank, or service provider name. Look for:
+   - Company names, logos, or letterheads
+   - Bank names for statements
+   - Merchant or vendor names
+
+3. FINANCIAL AMOUNTS: Extract with precision:
+   - Total amount (the main amount shown)
+   - VAT/Tax amount (if visible separately)
+   - Net amount (if visible, or calculate: total - VAT)
+   - Currency (look for symbols €, $, CHF, Fr., £, ¥ or currency codes)
+
+4. DATES: Find and extract:
+   - Document date, issue date, or transaction date
+   - Convert to YYYY-MM-DD format
+
+5. DOCUMENT NUMBER: Find invoice numbers, receipt numbers, statement numbers, or transaction IDs.
+
+6. EXPENSE CATEGORY: Categorize based on vendor and content:
+   - travel, meals, utilities, software, professional services, office supplies, telecommunications, insurance, rent, or other
+
+File name: "${fileName}"${ocrContext}
+
+Be thorough and accurate. If information is not clearly visible or present in the OCR text, set it to null. Only extract what you can clearly identify.`,
         };
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {

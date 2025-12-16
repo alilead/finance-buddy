@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { ProcessedDocument } from '@/types/document';
-import { Building2, TrendingUp, FileText, DollarSign } from 'lucide-react';
+import { Building2, TrendingUp, FileText, DollarSign, PieChart } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface SummaryViewProps {
   documents: ProcessedDocument[];
@@ -19,26 +20,16 @@ interface VendorSummary {
   vendor: string;
   count: number;
   totalCHF: number;
-  documents: ProcessedDocument[];
 }
 
 const SummaryView = ({ documents }: SummaryViewProps) => {
-  const completedDocs = documents.filter(d => d.status === 'completed');
+  const completedDocs = useMemo(() => documents.filter(d => d.status === 'completed'), [documents]);
 
-  // Summary by category
   const categorySummary = useMemo(() => {
     const categoryMap = new Map<string, CategorySummary>();
-
     completedDocs.forEach(doc => {
       const category = doc.extractedData.expenseCategory || 'Uncategorized';
-      const existing = categoryMap.get(category) || {
-        category,
-        count: 0,
-        totalCHF: 0,
-        vatCHF: 0,
-        netCHF: 0,
-      };
-
+      const existing = categoryMap.get(category) || { category, count: 0, totalCHF: 0, vatCHF: 0, netCHF: 0 };
       categoryMap.set(category, {
         category,
         count: existing.count + 1,
@@ -47,38 +38,23 @@ const SummaryView = ({ documents }: SummaryViewProps) => {
         netCHF: existing.netCHF + (doc.extractedData.netAmountCHF || 0),
       });
     });
-
-    return Array.from(categoryMap.values())
-      .sort((a, b) => b.totalCHF - a.totalCHF);
+    return Array.from(categoryMap.values()).sort((a, b) => b.totalCHF - a.totalCHF);
   }, [completedDocs]);
 
-  // Summary by vendor
   const vendorSummary = useMemo(() => {
     const vendorMap = new Map<string, VendorSummary>();
-
     completedDocs.forEach(doc => {
       const vendor = doc.extractedData.issuer || 'Unknown';
-      const existing = vendorMap.get(vendor) || {
-        vendor,
-        count: 0,
-        totalCHF: 0,
-        documents: [],
-      };
-
+      const existing = vendorMap.get(vendor) || { vendor, count: 0, totalCHF: 0 };
       vendorMap.set(vendor, {
         vendor,
         count: existing.count + 1,
         totalCHF: existing.totalCHF + (doc.extractedData.totalAmountCHF || 0),
-        documents: [...existing.documents, doc],
       });
     });
-
-    return Array.from(vendorMap.values())
-      .sort((a, b) => b.totalCHF - a.totalCHF)
-      .slice(0, 10); // Top 10 vendors
+    return Array.from(vendorMap.values()).sort((a, b) => b.totalCHF - a.totalCHF).slice(0, 10);
   }, [completedDocs]);
 
-  // Overall totals
   const totals = useMemo(() => {
     return completedDocs.reduce(
       (acc, doc) => ({
@@ -91,156 +67,129 @@ const SummaryView = ({ documents }: SummaryViewProps) => {
     );
   }, [completedDocs]);
 
-  // Document type breakdown
   const typeBreakdown = useMemo(() => {
-    const types = {
+    return {
       bank_statement: completedDocs.filter(d => d.documentType === 'bank_statement').length,
       invoice: completedDocs.filter(d => d.documentType === 'invoice').length,
       receipt: completedDocs.filter(d => d.documentType === 'receipt').length,
-      unknown: completedDocs.filter(d => d.documentType === 'unknown').length,
     };
-    return types;
   }, [completedDocs]);
+
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(amount);
 
   if (completedDocs.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        No completed documents to summarize
+      <div className="text-center py-16 text-muted-foreground">
+        <FileText className="w-16 h-16 mx-auto mb-4 opacity-50" />
+        <p className="text-lg">No completed documents to summarize</p>
+        <p className="text-sm mt-2">Upload and process documents to see a summary</p>
       </div>
     );
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('de-CH', {
-      style: 'currency',
-      currency: 'CHF',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Overall Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Overall Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Total Documents
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Documents</CardTitle>
+            <FileText className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totals.count}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {typeBreakdown.bank_statement} statements, {typeBreakdown.invoice} invoices, {typeBreakdown.receipt} receipts
-            </div>
+            <p className="text-xs text-muted-foreground">{`${typeBreakdown.invoice} invoices, ${typeBreakdown.receipt} receipts`}</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <DollarSign className="w-4 h-4" />
-              Total Amount
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Amount</CardTitle>
+            <DollarSign className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-accent">{formatCurrency(totals.totalCHF)}</div>
-            <div className="text-xs text-muted-foreground mt-1">All currencies converted to CHF</div>
+            <p className="text-xs text-muted-foreground">Converted to CHF</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" />
-              Total VAT
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total VAT</CardTitle>
+            <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totals.vatCHF)}</div>
-            <div className="text-xs text-muted-foreground mt-1">7.7% Swiss VAT</div>
+            <p className="text-xs text-muted-foreground">7.7% Swiss VAT</p>
           </CardContent>
         </Card>
-
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-              <Building2 className="w-4 h-4" />
-              Net Amount
-            </CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Net Amount</CardTitle>
+            <Building2 className="w-4 h-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totals.netCHF)}</div>
-            <div className="text-xs text-muted-foreground mt-1">Total minus VAT</div>
+            <p className="text-xs text-muted-foreground">After VAT deduction</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Category Breakdown */}
-      {categorySummary.length > 0 && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Category Breakdown */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Expenses by Category
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2"><PieChart className="w-5 h-5" />Expenses by Category</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {categorySummary.map(cat => (
-                <div key={cat.category} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div>
-                    <div className="font-medium">{cat.category}</div>
-                    <div className="text-sm text-muted-foreground">{cat.count} document{cat.count !== 1 ? 's' : ''}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold">{formatCurrency(cat.totalCHF)}</div>
-                    {cat.vatCHF > 0 && (
-                      <div className="text-xs text-muted-foreground">
-                        VAT: {formatCurrency(cat.vatCHF)}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">Documents</TableHead>
+                  <TableHead className="text-right">Total Amount (CHF)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {categorySummary.map(cat => (
+                  <TableRow key={cat.category}>
+                    <TableCell className="font-medium">{cat.category}</TableCell>
+                    <TableCell className="text-right">{cat.count}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(cat.totalCHF)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
-      )}
 
-      {/* Top Vendors */}
-      {vendorSummary.length > 0 && (
+        {/* Top Vendors */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="w-5 h-5" />
-              Top Vendors
-            </CardTitle>
+            <CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" />Top 10 Vendors</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {vendorSummary.map(vendor => (
-                <div key={vendor.vendor} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                  <div>
-                    <div className="font-medium">{vendor.vendor}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {vendor.count} transaction{vendor.count !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold">{formatCurrency(vendor.totalCHF)}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vendor</TableHead>
+                  <TableHead className="text-right">Transactions</TableHead>
+                  <TableHead className="text-right">Total Amount (CHF)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {vendorSummary.map(vendor => (
+                  <TableRow key={vendor.vendor}>
+                    <TableCell className="font-medium">{vendor.vendor}</TableCell>
+                    <TableCell className="text-right">{vendor.count}</TableCell>
+                    <TableCell className="text-right font-semibold">{formatCurrency(vendor.totalCHF)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
-      )}
+      </div>
     </div>
   );
 };
 
 export default SummaryView;
-
