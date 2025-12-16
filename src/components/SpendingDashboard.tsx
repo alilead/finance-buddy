@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { ProcessedDocument } from '@/types/document';
 import {
   BarChart,
@@ -58,7 +58,12 @@ const COLORS = [
 ];
 
 const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
+  const [isMounted, setIsMounted] = useState(false);
   const completedDocs = documents.filter(d => d.status === 'completed');
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Monthly spending analysis
   const monthlySpending = useMemo(() => {
@@ -223,6 +228,15 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
     );
   }
 
+  if (!isMounted) {
+    return (
+      <div className="text-center py-16 text-muted-foreground">
+        <PieChartIcon className="w-16 h-16 mx-auto mb-4 opacity-50 animate-pulse" />
+        <p className="text-lg">Loading dashboard...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Key Statistics */}
@@ -291,7 +305,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
       </div>
 
       {/* Monthly Spending Trend */}
-      {monthlySpending.length > 0 && (
+      {monthlySpending.length > 0 && Array.isArray(monthlySpending) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -334,7 +348,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Category Spending Pie Chart */}
-        {categorySpending.length > 0 && (
+        {categorySpending.length > 0 && Array.isArray(categorySpending) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -385,7 +399,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
         )}
 
         {/* Top Vendors Bar Chart */}
-        {topVendors.length > 0 && (
+        {topVendors.length > 0 && Array.isArray(topVendors) && (
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -418,7 +432,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
       </div>
 
       {/* Monthly Breakdown Bar Chart */}
-      {monthlySpending.length > 0 && (
+      {monthlySpending.length > 0 && Array.isArray(monthlySpending) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -449,7 +463,7 @@ const SpendingDashboard = ({ documents }: SpendingDashboardProps) => {
       )}
 
       {/* Document Type Distribution */}
-      {typeBreakdown.length > 0 && (
+      {typeBreakdown.length > 0 && Array.isArray(typeBreakdown) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

@@ -8,16 +8,24 @@ import IssuerGroupView from '@/components/IssuerGroupView';
 import SummaryView from '@/components/SummaryView';
 import SpendingDashboard from '@/components/SpendingDashboard';
 import AnalyzeButton from '@/components/AnalyzeButton';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { Button } from '@/components/ui/button';
 import { useDocumentProcessor } from '@/hooks/useDocumentProcessor';
 import { Trash2, LayoutGrid, Table2, RefreshCw, Loader2, Building2, BarChart3, TrendingUp } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 type ViewMode = 'cards' | 'table' | 'grouped' | 'summary' | 'dashboard';
 
 const Index = () => {
   const { documents, isProcessing, isLoading, processFiles, clearDocuments, refreshDocuments } = useDocumentProcessor();
-  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = localStorage.getItem('finance-buddy-view-mode');
+    return (saved as ViewMode) || 'cards';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('finance-buddy-view-mode', viewMode);
+  }, [viewMode]);
 
   // Sort documents by date (newest first)
   const sortedDocuments = useMemo(() => {
@@ -221,9 +229,9 @@ const Index = () => {
             )}
 
             {viewMode === 'dashboard' && (
-              <div>
+              <ErrorBoundary>
                 <SpendingDashboard documents={sortedDocuments} />
-              </div>
+              </ErrorBoundary>
             )}
           </>
         )}
