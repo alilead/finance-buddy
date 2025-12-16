@@ -132,13 +132,22 @@ serve(async (req) => {
     }
 
     // Step 1: Process with NanoBanana Pro for enhanced OCR (if available)
+    // This is especially important for PDFs
     let ocrText = '';
     let ocrConfidence = 0;
+    const isPDF = fileType === 'application/pdf';
+    
+    console.log(`Starting OCR processing for ${isPDF ? 'PDF' : 'image'}: ${fileName}`);
     const nanoBananaResult = await processWithNanoBanana(fileData, fileName, fileType);
     if (nanoBananaResult && nanoBananaResult.confidence > 0.5) {
       ocrText = nanoBananaResult.text;
       ocrConfidence = nanoBananaResult.confidence;
-      console.log(`NanoBanana Pro extracted text (confidence: ${ocrConfidence.toFixed(2)})`);
+      console.log(`NanoBanana Pro extracted ${ocrText.length} characters (confidence: ${ocrConfidence.toFixed(2)})`);
+      if (ocrText.length > 0) {
+        console.log(`OCR preview (first 200 chars): ${ocrText.substring(0, 200)}...`);
+      }
+    } else {
+      console.log('NanoBanana Pro OCR not available or low confidence, will rely on Gemini visual analysis');
     }
 
     // Prepare the prompt for document analysis with enhanced Gemini instructions
@@ -147,9 +156,18 @@ serve(async (req) => {
 ENHANCED PROCESSING WITH OCR:
 - You may receive OCR-extracted text from NanoBanana Pro for improved accuracy
 - Use the OCR text to identify exact amounts, dates, and vendor names
-- Cross-reference OCR text with the visual image for verification
+- Cross-reference OCR text with the visual document for verification
 - OCR text provides higher accuracy for numbers and text extraction
 - Combine visual analysis with OCR data for best results
+
+IMPORTANT FOR PDF ANALYSIS:
+- PDFs contain structured text and layout - read ALL pages if multi-page
+- Look for tables, itemized lists, and structured data
+- Extract information from headers, footers, and all sections
+- Read line by line, don't skip any text
+- For multi-page PDFs: analyze all pages and combine information
+- PDFs often have better text quality than scanned images
+- Use the document structure (tables, columns, sections) to find information
 
 IMPORTANT FOR IMAGE ANALYSIS:
 - For photos/receipts: Carefully examine the entire image, including all text, numbers, dates, and logos
@@ -205,10 +223,78 @@ Only return valid JSON, no other text or explanations.`;
 
     // Build enhanced prompt with OCR text if available
     const ocrContext = ocrText 
-      ? `\n\nENHANCED OCR TEXT (extracted with NanoBanana Pro, confidence: ${ocrConfidence.toFixed(2)}):\n${ocrText}\n\nUse this OCR text to help identify amounts, dates, vendor names, and other details. Cross-reference with the image to ensure accuracy.`
+      ? `\n\n═══════════════════════════════════════════════════════════
+ENHANCED OCR TEXT (extracted with NanoBanana Pro, confidence: ${ocrConfidence.toFixed(2)}):
+═══════════════════════════════════════════════════════════
+${ocrText}
+═══════════════════════════════════════════════════════════
+
+CRITICAL: This OCR text contains the EXACT text from the document. Use it as your PRIMARY source for:
+- All amounts (look for numbers with currency symbols)
+- Dates (search for date patterns)
+- Vendor/issuer names (company names, bank names)
+- Document numbers (invoice numbers, reference numbers)
+- Itemized lists and line items
+- Tables and structured data
+
+Cross-reference with the visual document when available, but prioritize the OCR text for accuracy.
+If the OCR text is available, you MUST use it to extract information.`
       : '';
 
-    const userMessage = fileType.startsWith('image/')
+    const isImage = fileType.startsWith('image/');
+    const isPDF = fileType === 'application/pdf';
+
+    // Enhanced prompt for PDFs
+    const pdfPrompt = `You are analyzing a PDF financial document. The filename is "${fileName}".${ocrContext}
+
+IMPORTANT: This PDF document has been processed with OCR. Analyze the document structure and content carefully.
+
+1. DOCUMENT TYPE: Determine if this is a bank_statement, invoice, or receipt:
+   - bank_statement: Shows account transactions, balances, statement periods, bank letterhead
+   - invoice: Formal billing with invoice numbers, company details, itemized charges, due dates
+   - receipt: Payment confirmation, transaction receipt, simple purchase record
+
+2. VENDOR/ISSUER: Extract the company or organization name:
+   - Look for company names, logos, letterheads
+   - Bank names (UBS, Credit Suisse, PostFinance, etc.)
+   - Merchant/store names
+   - Service provider names
+
+3. FINANCIAL AMOUNTS: Extract ALL amounts with precision:
+   - Total amount (usually the largest/most prominent amount)
+   - VAT/Tax amount (often shown separately, look for "VAT", "Tax", "MwSt", "TVA")
+   - Net amount (before tax, or calculate: total - VAT)
+   - Subtotal amounts if available
+   - Currency symbols (€, $, CHF, Fr., £, ¥) or currency codes (EUR, USD, CHF, GBP, etc.)
+
+4. DATES: Find and extract in any format, then convert to YYYY-MM-DD:
+   - Document date / Issue date
+   - Transaction date
+   - Due date (for invoices)
+   - Statement period (for bank statements)
+   - Look for dates in formats: DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, DD.MM.YYYY, etc.
+
+5. DOCUMENT NUMBER: Extract:
+   - Invoice numbers (often labeled "Invoice #", "Rechnung", "Facture")
+   - Receipt numbers
+   - Transaction IDs
+   - Reference numbers
+
+6. EXPENSE CATEGORY: Categorize based on vendor and content:
+   - travel: hotels, airlines, trains, taxis, car rentals, travel agencies
+   - meals: restaurants, cafes, catering, food delivery, groceries
+   - utilities: electricity, water, gas, heating, waste disposal
+   - software: software licenses, cloud services, SaaS subscriptions, IT services
+   - professional services: consulting, legal, accounting, marketing, design
+   - office supplies: stationery, equipment, furniture, office materials
+   - telecommunications: phone bills, internet, mobile plans, data services
+   - insurance: health, liability, property, car insurance
+   - rent: office rent, lease payments, property rental
+   - other: anything not fitting above categories
+
+Be extremely thorough. Read the entire document. Look for tables, itemized lists, and all text. Extract everything you can find. If information is not clearly visible or ambiguous, set it to null (do not guess).`;
+
+    const userMessage = isImage
       ? {
           role: 'user',
           content: [
@@ -251,11 +337,28 @@ Be thorough and accurate. If information is not clearly visible, set it to null.
             },
           ],
         }
+      : isPDF
+      ? {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: pdfPrompt,
+            },
+            // For PDFs, try sending as image_url (some APIs accept PDFs this way)
+            // If OCR text is available, it will be the primary source
+            // Gemini 3.0 Preview can process PDFs, but format may vary by gateway
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${fileType};base64,${fileData}`,
+              },
+            },
+          ],
+        }
       : {
           role: 'user',
-          content: `This is a PDF document. The filename is "${fileName}".${ocrContext}
-
-Please analyze the document content and extract financial information including document type, dates, amounts, currencies, VAT information, and expense categories. Use the OCR text above to help identify details. Even if the text extraction is imperfect, look for patterns typical of bank statements, invoices, or receipts.`,
+          content: pdfPrompt,
         };
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
