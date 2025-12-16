@@ -56,8 +56,22 @@ export const useDocumentProcessor = () => {
   const loadDocuments = async () => {
     if (!user) return;
     
+    // Skip Supabase for admin user
+    const isAdmin = localStorage.getItem('admin-token') === 'admin-logged-in';
+    if (isAdmin) {
+      setIsLoading(false);
+      return;
+    }
+    
     setIsLoading(true);
     try {
+      // Check if we have a valid session first
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from('processed_documents')
         .select('*')
@@ -241,32 +255,43 @@ export const useDocumentProcessor = () => {
         });
 
         // Try to save to Supabase if available (non-blocking)
-        try {
-          const filePath = `${user.id}/${docId}-${file.name}`;
-          await supabase.storage.from('documents').upload(filePath, file);
-          
-          await supabase.from('processed_documents').insert({
-            id: docId,
-            user_id: user.id,
-            file_name: file.name,
-            file_type: file.type,
-            file_path: filePath,
-            document_type: processedData.documentType,
-            document_date: extractedData.documentDate,
-            issuer: extractedData.issuer,
-            document_number: extractedData.documentNumber,
-            total_amount: extractedData.totalAmount,
-            original_currency: extractedData.originalCurrency,
-            total_amount_chf: extractedData.totalAmountCHF,
-            vat_amount: extractedData.vatAmount,
-            vat_amount_chf: extractedData.vatAmountCHF,
-            net_amount: extractedData.netAmount,
-            net_amount_chf: extractedData.netAmountCHF,
-            expense_category: extractedData.expenseCategory,
-            status: 'completed',
-          });
-        } catch (dbError) {
-          console.log('Could not save to Supabase, using localStorage only');
+        // Skip if admin user (no real Supabase session)
+        const isAdmin = localStorage.getItem('admin-token') === 'admin-logged-in';
+        if (!isAdmin) {
+          try {
+            // Check if we have a valid session first
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+              const filePath = `${user.id}/${docId}-${file.name}`;
+              await supabase.storage.from('documents').upload(filePath, file, {
+                upsert: true,
+              });
+              
+              await supabase.from('processed_documents').insert({
+                id: docId,
+                user_id: user.id,
+                file_name: file.name,
+                file_type: file.type,
+                file_path: filePath,
+                document_type: processedData.documentType,
+                document_date: extractedData.documentDate,
+                issuer: extractedData.issuer,
+                document_number: extractedData.documentNumber,
+                total_amount: extractedData.totalAmount,
+                original_currency: extractedData.originalCurrency,
+                total_amount_chf: extractedData.totalAmountCHF,
+                vat_amount: extractedData.vatAmount,
+                vat_amount_chf: extractedData.vatAmountCHF,
+                net_amount: extractedData.netAmount,
+                net_amount_chf: extractedData.netAmountCHF,
+                expense_category: extractedData.expenseCategory,
+                status: 'completed',
+              });
+            }
+          } catch (dbError) {
+            // Silently fail - we're using localStorage as primary storage
+            console.log('Could not save to Supabase (this is OK for admin/local mode):', dbError);
+          }
         }
 
       } catch (error) {
@@ -308,14 +333,21 @@ export const useDocumentProcessor = () => {
       const doc = documents.find(d => d.id === docId);
       
       // Try to delete from Supabase (non-blocking)
-      try {
-        if (doc) {
-          const filePath = `${user.id}/${docId}-${doc.fileName}`;
-          await supabase.storage.from('documents').remove([filePath]);
+      // Skip if admin user
+      const isAdmin = localStorage.getItem('admin-token') === 'admin-logged-in';
+      if (!isAdmin) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            if (doc) {
+              const filePath = `${user.id}/${docId}-${doc.fileName}`;
+              await supabase.storage.from('documents').remove([filePath]);
+            }
+            await supabase.from('processed_documents').delete().eq('id', docId);
+          }
+        } catch (dbError) {
+          console.log('Could not delete from Supabase (this is OK for admin/local mode)');
         }
-        await supabase.from('processed_documents').delete().eq('id', docId);
-      } catch (dbError) {
-        console.log('Could not delete from Supabase, using localStorage only');
       }
 
       // Delete from local state and localStorage
@@ -344,14 +376,21 @@ export const useDocumentProcessor = () => {
 
     try {
       // Try to delete from Supabase (non-blocking)
-      try {
-        const filePaths = documents.map(doc => `${user.id}/${doc.id}-${doc.fileName}`);
-        if (filePaths.length > 0) {
-          await supabase.storage.from('documents').remove(filePaths);
+      // Skip if admin user
+      const isAdmin = localStorage.getItem('admin-token') === 'admin-logged-in';
+      if (!isAdmin) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const filePaths = documents.map(doc => `${user.id}/${doc.id}-${doc.fileName}`);
+            if (filePaths.length > 0) {
+              await supabase.storage.from('documents').remove(filePaths);
+            }
+            await supabase.from('processed_documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+          }
+        } catch (dbError) {
+          console.log('Could not clear from Supabase (this is OK for admin/local mode)');
         }
-        await supabase.from('processed_documents').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      } catch (dbError) {
-        console.log('Could not clear from Supabase, using localStorage only');
       }
 
       // Clear from local state and localStorage
