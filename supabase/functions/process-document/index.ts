@@ -142,7 +142,7 @@ serve(async (req) => {
     }
 
     // Prepare the prompt for document analysis with enhanced Gemini instructions
-    const systemPrompt = `You are an expert financial document analyzer powered by Google Gemini with enhanced OCR capabilities via NanoBanana Pro. Your task is to analyze financial documents (images or PDFs) and extract all relevant information with high accuracy.
+    const systemPrompt = `You are an expert financial document analyzer powered by Google Gemini 3.0 Preview. Your capabilities are enhanced with a powerful OCR system called NanoBanana Pro. Your task is to analyze financial documents (images or PDFs) and extract all relevant information with high accuracy.
 
 ENHANCED PROCESSING WITH OCR:
 - You may receive OCR-extracted text from NanoBanana Pro for improved accuracy
@@ -265,7 +265,7 @@ Please analyze the document content and extract financial information including 
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.0-flash-exp', // Better model for image analysis
+        model: 'google/gemini-3.0-preview', // Better model for image analysis
         messages: [
           { role: 'system', content: systemPrompt },
           userMessage,
