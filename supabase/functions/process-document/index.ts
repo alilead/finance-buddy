@@ -102,9 +102,26 @@ async function processWithNanoBanana(
 
     const data = await response.json();
     
+    // Try multiple possible field names for extracted text
+    const extractedText = data.text || 
+                          data.extracted_text || 
+                          data.ocr_text || 
+                          data.content ||
+                          data.result?.text ||
+                          data.data?.text ||
+                          '';
+    
+    // Try multiple possible field names for confidence
+    const confidence = data.confidence || 
+                       data.ocr_confidence || 
+                       data.quality ||
+                       (extractedText.length > 0 ? 0.9 : 0.5);
+    
+    console.log(`NanoBanana response - text length: ${extractedText.length}, confidence: ${confidence}`);
+    
     return {
-      text: data.text || data.extracted_text || data.ocr_text || '',
-      confidence: data.confidence || data.ocr_confidence || 0.9,
+      text: extractedText,
+      confidence: typeof confidence === 'number' ? confidence : parseFloat(confidence) || 0.9,
     };
   } catch (error) {
     console.error('Error processing with NanoBanana Pro:', error);
@@ -139,15 +156,25 @@ serve(async (req) => {
     
     console.log(`Starting OCR processing for ${isPDF ? 'PDF' : 'image'}: ${fileName}`);
     const nanoBananaResult = await processWithNanoBanana(fileData, fileName, fileType);
-    if (nanoBananaResult && nanoBananaResult.confidence > 0.5) {
-      ocrText = nanoBananaResult.text;
-      ocrConfidence = nanoBananaResult.confidence;
-      console.log(`NanoBanana Pro extracted ${ocrText.length} characters (confidence: ${ocrConfidence.toFixed(2)})`);
-      if (ocrText.length > 0) {
-        console.log(`OCR preview (first 200 chars): ${ocrText.substring(0, 200)}...`);
+    if (nanoBananaResult) {
+      ocrText = nanoBananaResult.text || '';
+      ocrConfidence = nanoBananaResult.confidence || 0;
+      
+      if (ocrText.length > 0 && ocrConfidence > 0.3) {
+        console.log(`✓ NanoBanana Pro extracted ${ocrText.length} characters (confidence: ${ocrConfidence.toFixed(2)})`);
+        if (ocrText.length > 0) {
+          console.log(`OCR preview (first 300 chars): ${ocrText.substring(0, 300)}...`);
+        }
+      } else {
+        console.log(`⚠ NanoBanana Pro OCR result: ${ocrText.length} chars, confidence ${ocrConfidence.toFixed(2)} - may use fallback`);
+        // Still use it if we have some text, even with lower confidence
+        if (ocrText.length < 50) {
+          ocrText = '';
+          ocrConfidence = 0;
+        }
       }
     } else {
-      console.log('NanoBanana Pro OCR not available or low confidence, will rely on Gemini visual analysis');
+      console.log('NanoBanana Pro OCR not available, will rely on Gemini analysis');
     }
 
     // Prepare the prompt for document analysis with enhanced Gemini instructions
@@ -243,9 +270,28 @@ If the OCR text is available, you MUST use it to extract information.`
 
     const isImage = fileType.startsWith('image/');
     const isPDF = fileType === 'application/pdf';
+    
+    // For PDFs with good OCR text, we'll use text-only analysis (more reliable)
+    const hasGoodOCR = isPDF && ocrText.length > 100 && ocrConfidence > 0.7;
 
     // Enhanced prompt for PDFs
-    const pdfPrompt = `You are analyzing a PDF financial document. The filename is "${fileName}".${ocrContext}
+    const pdfPrompt = hasGoodOCR
+      ? `You are analyzing a PDF financial document. The filename is "${fileName}".
+
+═══════════════════════════════════════════════════════════
+EXTRACTED TEXT FROM PDF (OCR with ${(ocrConfidence * 100).toFixed(1)}% confidence):
+═══════════════════════════════════════════════════════════
+${ocrText}
+═══════════════════════════════════════════════════════════
+
+CRITICAL INSTRUCTIONS:
+- This text was extracted from the PDF using OCR
+- Extract ALL financial information from this text
+- Look for amounts, dates, vendor names, document numbers
+- The text may have formatting issues, but all information is present
+- Be thorough and extract everything you can find
+`
+      : `You are analyzing a PDF financial document. The filename is "${fileName}".${ocrContext}
 
 IMPORTANT: This PDF document has been processed with OCR. Analyze the document structure and content carefully.
 
@@ -338,24 +384,67 @@ Be thorough and accurate. If information is not clearly visible, set it to null.
           ],
         }
       : isPDF
-      ? {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: pdfPrompt,
-            },
-            // For PDFs, try sending as image_url (some APIs accept PDFs this way)
-            // If OCR text is available, it will be the primary source
-            // Gemini 3.0 Preview can process PDFs, but format may vary by gateway
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${fileType};base64,${fileData}`,
+      ? hasGoodOCR
+        ? {
+            // For PDFs with good OCR, use text-only analysis (more reliable)
+            role: 'user',
+            content: pdfPrompt + `
+
+1. DOCUMENT TYPE: Determine if this is a bank_statement, invoice, or receipt:
+   - bank_statement: Shows account transactions, balances, statement periods, bank letterhead
+   - invoice: Formal billing with invoice numbers, company details, itemized charges, due dates
+   - receipt: Payment confirmation, transaction receipt, simple purchase record
+
+2. VENDOR/ISSUER: Extract the company or organization name from the text above
+
+3. FINANCIAL AMOUNTS: Extract ALL amounts with precision:
+   - Total amount (usually the largest/most prominent amount)
+   - VAT/Tax amount (often shown separately, look for "VAT", "Tax", "MwSt", "TVA", "TVA", "IVA")
+   - Net amount (before tax, or calculate: total - VAT)
+   - Currency symbols (€, $, CHF, Fr., £, ¥) or currency codes (EUR, USD, CHF, GBP, etc.)
+
+4. DATES: Find and extract in any format, then convert to YYYY-MM-DD:
+   - Document date / Issue date
+   - Transaction date
+   - Due date (for invoices)
+   - Statement period (for bank statements)
+   - Look for dates in formats: DD/MM/YYYY, MM/DD/YYYY, YYYY-MM-DD, DD.MM.YYYY, etc.
+
+5. DOCUMENT NUMBER: Extract:
+   - Invoice numbers (often labeled "Invoice #", "Rechnung", "Facture", "Facture No")
+   - Receipt numbers
+   - Transaction IDs
+   - Reference numbers
+
+6. EXPENSE CATEGORY: Categorize based on vendor and content:
+   - travel: hotels, airlines, trains, taxis, car rentals, travel agencies
+   - meals: restaurants, cafes, catering, food delivery, groceries
+   - utilities: electricity, water, gas, heating, waste disposal
+   - software: software licenses, cloud services, SaaS subscriptions, IT services
+   - professional services: consulting, legal, accounting, marketing, design
+   - office supplies: stationery, equipment, furniture, office materials
+   - telecommunications: phone bills, internet, mobile plans, data services
+   - insurance: health, liability, property, car insurance
+   - rent: office rent, lease payments, property rental
+   - other: anything not fitting above categories
+
+Be extremely thorough. Read the entire text above. Look for tables, itemized lists, and all information. Extract everything you can find. If information is not clearly visible or ambiguous, set it to null (do not guess).`,
+          }
+        : {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: pdfPrompt,
               },
-            },
-          ],
-        }
+              // For PDFs without good OCR, try sending the PDF
+              // Note: This may not work with all gateways, but we try
+              {
+                type: 'text',
+                text: `\n\nSince OCR extraction was not available or had low confidence, please analyze the PDF document directly. Extract all financial information including document type, dates, amounts, currencies, VAT information, and expense categories.`,
+              },
+            ],
+          }
       : {
           role: 'user',
           content: pdfPrompt,
