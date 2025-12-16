@@ -3,6 +3,7 @@ import { ProcessedDocument, ExtractedData, DocumentType } from '@/types/document
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { convertToCHF } from '@/services/currencyConverter';
 
 const STORAGE_KEY = 'finance-buddy-documents';
 
@@ -199,7 +200,29 @@ export const useDocumentProcessor = () => {
           }
         }
 
-        const extractedData = processedData.extractedData as ExtractedData;
+        let extractedData = processedData.extractedData as ExtractedData;
+
+        // Use currency converter for accurate CHF conversion
+        if (extractedData.totalAmount && extractedData.originalCurrency) {
+          const totalCHF = await convertToCHF(extractedData.totalAmount, extractedData.originalCurrency);
+          if (totalCHF !== null) {
+            extractedData.totalAmountCHF = totalCHF;
+          }
+        }
+
+        if (extractedData.vatAmount && extractedData.originalCurrency) {
+          const vatCHF = await convertToCHF(extractedData.vatAmount, extractedData.originalCurrency);
+          if (vatCHF !== null) {
+            extractedData.vatAmountCHF = vatCHF;
+          }
+        }
+
+        if (extractedData.netAmount && extractedData.originalCurrency) {
+          const netCHF = await convertToCHF(extractedData.netAmount, extractedData.originalCurrency);
+          if (netCHF !== null) {
+            extractedData.netAmountCHF = netCHF;
+          }
+        }
 
         // Update local state
         const updatedDoc: ProcessedDocument = {

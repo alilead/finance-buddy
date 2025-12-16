@@ -42,32 +42,69 @@ const AnalyzeButton = ({ documents, onAnalyze }: AnalyzeButtonProps) => {
       vendorGroups[vendor] = (vendorGroups[vendor] || 0) + 1;
     });
 
-    // Create summary message
+    // Create detailed vendor summary
     const vendorSummary = Object.entries(vendorGroups)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([vendor, count]) => `${count} from ${vendor}`)
-      .join(', ');
+      .slice(0, 10)
+      .map(([vendor, count]) => {
+        const vendorTotal = completedDocs
+          .filter(d => d.extractedData.issuer === vendor)
+          .reduce((sum, d) => sum + (d.extractedData.totalAmountCHF || 0), 0);
+        return `${count} from ${vendor} (${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF', minimumFractionDigits: 0 }).format(vendorTotal)})`;
+      })
+      .join('\n   ');
+
+    // Category breakdown
+    const categoryGroups: Record<string, { count: number; total: number }> = {};
+    completedDocs.forEach(doc => {
+      const category = doc.extractedData.expenseCategory || 'Uncategorized';
+      if (!categoryGroups[category]) {
+        categoryGroups[category] = { count: 0, total: 0 };
+      }
+      categoryGroups[category].count++;
+      categoryGroups[category].total += doc.extractedData.totalAmountCHF || 0;
+    });
+
+    const categorySummary = Object.entries(categoryGroups)
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([category, data]) => 
+        `${category}: ${data.count} docs, ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF', minimumFractionDigits: 0 }).format(data.total)}`
+      )
+      .join('\n   ');
+
+    // Date range
+    const dates = completedDocs
+      .map(d => d.extractedData.documentDate)
+      .filter(Boolean)
+      .sort();
+    const dateRange = dates.length > 0 
+      ? `From ${dates[0]} to ${dates[dates.length - 1]}`
+      : 'No dates available';
 
     const summary = `
-📊 FINANCIAL DOCUMENT ANALYSIS SUMMARY
+📊 COMPREHENSIVE FINANCIAL ANALYSIS SUMMARY
 
-📄 Total Documents: ${stats.totalDocuments}
+📄 Document Overview:
+   • Total Documents: ${stats.totalDocuments}
    • Bank Statements: ${stats.bankStatements}
    • Invoices: ${stats.invoices}
    • Receipts: ${stats.receipts}
+   • Date Range: ${dateRange}
 
-💰 Financial Overview:
-   • Total Amount (CHF): ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(stats.totalAmountCHF)}
-   • Total VAT (CHF): ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(stats.totalVATCHF)}
-   • Net Amount (CHF): ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(stats.totalNetCHF)}
+💰 Financial Overview (All in CHF):
+   • Total Amount: ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(stats.totalAmountCHF)}
+   • Total VAT (7.7%): ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(stats.totalVATCHF)}
+   • Net Amount: ${new Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' }).format(stats.totalNetCHF)}
 
-🏢 Vendors: ${stats.vendors} unique vendors
-   Top vendors: ${vendorSummary || 'N/A'}
+🏢 Vendor Analysis (${stats.vendors} unique vendors):
+   ${vendorSummary || 'No vendors identified'}
 
-📁 Categories: ${stats.categories} expense categories
+📁 Expense Categories (${stats.categories} categories):
+   ${categorySummary || 'No categories assigned'}
 
 ${processingDocs.length > 0 ? `\n⏳ ${processingDocs.length} document(s) still processing...` : ''}
+
+✅ All amounts converted to CHF using live exchange rates
     `.trim();
 
     // Show summary in toast

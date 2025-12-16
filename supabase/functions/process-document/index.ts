@@ -67,8 +67,18 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Prepare the prompt for document analysis
-    const systemPrompt = `You are an expert financial document analyzer. Analyze the provided document and extract financial information accurately.
+    // Prepare the prompt for document analysis with enhanced Gemini instructions
+    const systemPrompt = `You are an expert financial document analyzer powered by Google Gemini. Your task is to analyze financial documents (images or PDFs) and extract all relevant information with high accuracy.
+
+IMPORTANT FOR IMAGE ANALYSIS:
+- For photos/receipts: Carefully examine the entire image, including all text, numbers, dates, and logos
+- Look for vendor names, store names, or company logos visible in the image
+- Extract amounts even if partially visible - be precise with decimal places
+- Identify currency symbols (€, $, CHF, Fr., £, ¥) or currency codes clearly visible
+- Read dates in any format and convert to YYYY-MM-DD
+- For receipts: Look for itemized lists and calculate totals if needed
+- For invoices: Find invoice numbers, due dates, and payment terms
+- For bank statements: Identify account numbers, statement periods, and balances
 
 Return a JSON object with this exact structure:
 {
@@ -118,7 +128,34 @@ Only return valid JSON, no other text or explanations.`;
           content: [
             {
               type: 'text',
-              text: `Analyze this financial document image and extract all visible financial information. Look for dates, amounts, vendor names, document numbers, and categorize the expense type. File name: ${fileName}`,
+              text: `You are analyzing a financial document PHOTO/RECEIPT. Please carefully examine this image and extract ALL visible information:
+
+1. DOCUMENT TYPE: Determine if this is a bank_statement, invoice, or receipt based on the document structure and content.
+
+2. VENDOR/ISSUER: Identify the company, store, or service provider name. Look for:
+   - Store names, logos, or business names
+   - Bank names for statements
+   - Company letterheads for invoices
+   - Merchant names on receipts
+
+3. FINANCIAL AMOUNTS: Extract with precision:
+   - Total amount (the main amount shown)
+   - VAT/Tax amount (if visible separately)
+   - Net amount (if visible, or calculate: total - VAT)
+   - Currency (look for symbols €, $, CHF, Fr., £, ¥ or currency codes)
+
+4. DATES: Find and extract:
+   - Document date, transaction date, or issue date
+   - Convert to YYYY-MM-DD format
+
+5. DOCUMENT NUMBER: Find invoice numbers, receipt numbers, or transaction IDs
+
+6. EXPENSE CATEGORY: Categorize based on vendor and content:
+   - travel, meals, utilities, software, professional services, office supplies, telecommunications, insurance, rent, or other
+
+File name: ${fileName}
+
+Be thorough and accurate. If information is not clearly visible, set it to null. Only extract what you can clearly see in the image.`,
             },
             {
               type: 'image_url',
@@ -130,7 +167,7 @@ Only return valid JSON, no other text or explanations.`;
         }
       : {
           role: 'user',
-          content: `This is a PDF document. The filename is "${fileName}". Please analyze the document content that has been converted to base64. Extract financial information including document type, dates, amounts, currencies, VAT information, and expense categories. Even if the text extraction is imperfect, look for patterns typical of bank statements, invoices, or receipts.`,
+          content: `This is a PDF document. The filename is "${fileName}". Please analyze the document content and extract financial information including document type, dates, amounts, currencies, VAT information, and expense categories. Even if the text extraction is imperfect, look for patterns typical of bank statements, invoices, or receipts.`,
         };
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -140,12 +177,14 @@ Only return valid JSON, no other text or explanations.`;
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.0-flash-exp', // Better model for image analysis
         messages: [
           { role: 'system', content: systemPrompt },
           userMessage,
         ],
         response_format: { type: 'json_object' },
+        temperature: 0.1, // Lower temperature for more accurate extraction
+        max_tokens: 2000,
       }),
     });
 
